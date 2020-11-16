@@ -15,7 +15,7 @@ class Attack(object):
         It temporarily changes the original model's training mode to `test`
         by `.eval()` only during an attack process.
     """
-    def __init__(self, name, model):
+    def __init__(self, name, model, models, gamma):
         r"""
         Initializes internal attack state.
         Arguments:
@@ -25,6 +25,8 @@ class Attack(object):
 
         self.attack = name
         self.model = model
+        self.models = models
+        self.gamma = gamma
         self.model_name = str(model).split("(")[0]
 
         self.training = model.training
@@ -110,6 +112,9 @@ class Attack(object):
 
             if verbose:
                 outputs = self.model(adv_images)
+                for i in range(len(self.models)):
+                    sub_model = self.models[i]
+                    outputs = outputs + self.gamma[i] * sub_model(adv_images)
                 _, predicted = torch.max(outputs.data, 1)
                 total += labels.size(0)
                 correct += (predicted == labels.to(self.device)).sum()
@@ -143,6 +148,9 @@ class Attack(object):
         Return least likely labels.
         """
         outputs = self.model(images)
+        for i in range(len(self.models)):
+            sub_model = self.models[i]
+            outputs = outputs + self.gamma[i] * sub_model(images)
         _, labels = torch.min(outputs.data, 1)
         labels = labels.detach_()
         return labels
@@ -160,8 +168,12 @@ class Attack(object):
         """
         if self.training:
             self.model.train()
+            for i in range(len(self.models)):
+                self.models[i].train()
         else:
             self.model.eval()
+            for i in range(len(self.models)):
+                self.models[i].eval()
 
     def __str__(self):
         info = self.__dict__.copy()
@@ -185,6 +197,8 @@ class Attack(object):
 
     def __call__(self, *input, **kwargs):
         self.model.eval()
+        for i in range(len(self.models)):
+            self.models[i].eval()
         images = self.forward(*input, **kwargs)
         self._switch_model()
 
